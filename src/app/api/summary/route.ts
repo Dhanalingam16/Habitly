@@ -1,0 +1,6 @@
+import { NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+function ds(d:Date){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function shift(s:string,n:number){const [y,m,d]=s.split("-").map(Number);const date=new Date(y,m-1,d);date.setDate(date.getDate()+n);return ds(date);}
+export async function GET(){const userId=await getSessionUserId();if(!userId)return NextResponse.json({error:"Unauthorized"},{status:401});const today=ds(new Date()),start=shift(today,-34);const habits=await prisma.habit.findMany({where:{userId},include:{checkIns:{where:{date:{gte:start,lte:today},completed:true},select:{date:true}}}});const weekly=Array.from({length:7},(_,i)=>{const date=shift(today,i-6);return {date,label:new Date(`${date}T12:00:00`).toLocaleDateString("en-US",{weekday:"short"}),completed:habits.reduce((s,h)=>s+(h.checkIns.some(c=>c.date===date)?1:0),0),total:habits.length};});const heatmap=Array.from({length:35},(_,i)=>{const date=shift(today,i-34);return {date,completed:habits.reduce((s,h)=>s+(h.checkIns.some(c=>c.date===date)?1:0),0)};});return NextResponse.json({total:habits.length,completedToday:habits.reduce((s,h)=>s+(h.checkIns.some(c=>c.date===today)?1:0),0),weekly,heatmap});}
